@@ -28,6 +28,10 @@ import time
 
 from timer import log, print_time
 
+import time
+
+from timer import log, print_time
+
 # (клиент, сколько секунд база отвечает на его запрос)
 CLIENTS = [
     ("alice", 0.5),
@@ -39,11 +43,14 @@ CLIENTS = [
 
 
 def handle_request(client: str, duration: float) -> None:
-    ...
+    log(f"{client}: запрос принят")
+    time.sleep(duration)
+    log(f"{client}: ответ отправлен")
 
 
 def main() -> None:
-    ...
+    for client, duration in CLIENTS:
+        handle_request(client, duration)
 
 
 if __name__ == "__main__":
