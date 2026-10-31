@@ -24,7 +24,9 @@ heavy_compute. Она синхронная и работает 1-3 секунд�
   для to_thread и для пула процессов. Почему оно отличается? Вспомните GIL.
 """
 
+import argparse
 import asyncio
+from concurrent.futures import ProcessPoolExecutor
 
 from timer import log, print_time
 
@@ -45,17 +47,53 @@ def heavy_compute() -> int:
     return h
 
 
-async def handle_request(client: str, duration: float) -> None:
+async def handle_request(
+        client: str,
+        duration: float,
+        mode: str,
+        heavy_clients: set[str],
+        pool: ProcessPoolExecutor | None = None,
+) -> None:
     log(f"{client}: запрос принят")
-    await asyncio.sleep(duration)
+    if client in heavy_clients:
+        if mode == "block":
+            # 4а: синхронный вызов, внутри нет ни одного await —
+            # event loop не может переключиться, пока вычисление не закончится.
+            heavy_compute()
+        elif mode == "thread":
+            # 4б: вычисление уходит в отдельный поток, корутина ждёт его через await.
+            await asyncio.to_thread(heavy_compute)
+        elif mode == "process":
+            # 4б: вычисление уходит в отдельный процесс из пула.
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(pool, heavy_compute)
+    else:
+        await asyncio.sleep(duration)
     log(f"{client}: ответ отправлен")
 
 
-async def main() -> None:
-    coroutines = [handle_request(client, duration) for client, duration in CLIENTS]
-    await asyncio.gather(*coroutines)
+async def main(mode: str, heavy_clients: set[str]) -> None:
+    if mode == "process":
+        with ProcessPoolExecutor() as pool:
+            coroutines = [
+                handle_request(client, duration, mode, heavy_clients, pool)
+                for client, duration in CLIENTS
+            ]
+            await asyncio.gather(*coroutines)
+    else:
+        coroutines = [
+            handle_request(client, duration, mode, heavy_clients)
+            for client, duration in CLIENTS
+        ]
+        await asyncio.gather(*coroutines)
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("mode", nargs="?", default="process", choices=["block", "thread", "process"])
+    parser.add_argument("--many", action="store_true", help="4в: тяжёлые bob, dave и eve")
+    args = parser.parse_args()
+
+    heavy = {"bob", "dave", "eve"} if args.many else {"bob"}
     with print_time():
-        asyncio.run(main())
+        asyncio.run(main(args.mode, heavy))
