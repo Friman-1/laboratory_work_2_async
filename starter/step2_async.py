@@ -14,18 +14,37 @@
 """
 
 import asyncio
+import sys
+from timer import print_time
 
 from timer import print_time
 
 
-def work(n: int) -> None:
-    ...
+async def work(n: int) -> None:
+    print(f"start {n}")
+    await asyncio.sleep(1)
+    print(f"done {n}")
 
 
-def main() -> None:
-    ...
+async def main_sequential() -> None:
+    for n in range(1, 11):
+        await work(n)
 
+
+async def main() -> None:
+    coroutines = [work(n) for n in range(1, 11)]
+    await asyncio.gather(*coroutines)
+
+
+async def main_tasks() -> None:
+    tasks = [asyncio.create_task(work(n)) for n in range(1, 11)]
+    for task in tasks:
+        await task
+
+
+VARIANTS = {"seq": main_sequential, "gather": main, "tasks": main_tasks}
 
 if __name__ == "__main__":
+    variant = sys.argv[1] if len(sys.argv) > 1 else "gather"
     with print_time():
-        main()
+        asyncio.run(VARIANTS[variant]())
